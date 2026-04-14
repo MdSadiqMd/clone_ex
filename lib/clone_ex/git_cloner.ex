@@ -20,11 +20,11 @@ defmodule CloneEx.GitCloner do
   """
   @spec clone_mirror(String.t(), Path.t(), keyword()) :: {:ok, Path.t()} | {:error, String.t()}
   def clone_mirror(url, dest_path, opts \\ []) do
-      fn ->
-        # Clean up any partial clone from a previous attempt
-        _ = if File.dir?(dest_path), do: File.rm_rf!(dest_path)
-        do_clone(url, dest_path, opts)
-      end
+    fn ->
+      # Clean up any partial clone from a previous attempt
+      _ = if File.dir?(dest_path), do: File.rm_rf!(dest_path)
+      do_clone(url, dest_path, opts)
+    end
   end
 
   defp do_clone(url, dest_path, opts) do
@@ -69,11 +69,22 @@ defmodule CloneEx.GitCloner do
         {:ok, dest_path}
 
       {:ok, {output, code}} ->
+        type = classify_error(code, output)
+
         :telemetry.execute(
           [:clone_ex, :clone, :error],
           %{exit_code: code},
           %{repo: repo_name, reason: output}
         )
+
+        error_msg = "git exit #{code}: #{String.trim(output)}"
+
+        if type == :permanent do
+          {:error, :permanent, error_msg}
+        else
+          {:error, error_msg}
+        end
+
       nil ->
         :telemetry.execute(
           [:clone_ex, :clone, :error],
@@ -84,4 +95,26 @@ defmodule CloneEx.GitCloner do
         {:error, "clone timed out after #{timeout}ms"}
     end
   end
+
+  @doc """
+  Classifies a git error as `:permanent`
+
+  Exit code 128 is used by git for many error types. We inspect the output
+  to distinguish auth/not-found errors (permanent) from network flakes (retriable).
+  """
+  @spec classify_error(integer(), String.t()) :: :permanent | :retriable
+  def classify_error(128, output) do
+    lower = String.downcase(output)
+
+    cond do
+      String.contains?(lower, "not found") -> :permanent
+      String.contains?(lower, "fatal: could not read username") -> :permanent
+      String.contains?(lower, "fatal: authentication failed") -> :permanent
+      String.contains?(lower, "does not exist") -> :permanent
+      # Typical network flakes also return 128, treat the rest as retriable
+      true -> :retriable
+    end
+  end
+
+  def classify_error(_code, _output), do: :retriable
 end
