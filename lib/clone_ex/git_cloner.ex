@@ -8,23 +8,34 @@ defmodule CloneEx.GitCloner do
   """
 
   require Logger
-  alias CloneEx.Utils
+  alias CloneEx.{Retry, Utils}
 
   @doc """
   Clones a git repository into a destination path using `--mirror`.
 
+  Wraps the clone in `CloneEx.Retry.with_retry/2` with exponential backoff.
   Permanent errors (auth failures, repo not found) are not retried.
 
   ## Options
     * `:timeout` - timeout for the clone operation in milliseconds (default: 600_000)
+    * `:max_retries` - maximum number of retry attempts (default: 3)
+    * `:retry_delay_ms` - base delay for backoff (default: 1_000)
   """
   @spec clone_mirror(String.t(), Path.t(), keyword()) :: {:ok, Path.t()} | {:error, String.t()}
   def clone_mirror(url, dest_path, opts \\ []) do
-    fn ->
-      # Clean up any partial clone from a previous attempt
-      _ = if File.dir?(dest_path), do: File.rm_rf!(dest_path)
-      do_clone(url, dest_path, opts)
-    end
+    retry_opts = [
+      max_attempts: Keyword.get(opts, :max_retries, 3),
+      base_delay_ms: Keyword.get(opts, :retry_delay_ms, 1000)
+    ]
+
+    Retry.with_retry(
+      fn ->
+        # Clean up any partial clone from a previous attempt
+        _ = if File.dir?(dest_path), do: File.rm_rf!(dest_path)
+        do_clone(url, dest_path, opts)
+      end,
+      retry_opts
+    )
   end
 
   defp do_clone(url, dest_path, opts) do
@@ -97,7 +108,7 @@ defmodule CloneEx.GitCloner do
   end
 
   @doc """
-  Classifies a git error as `:permanent`
+  Classifies a git error as `:permanent` (no point retrying) or `:retriable`.
 
   Exit code 128 is used by git for many error types. We inspect the output
   to distinguish auth/not-found errors (permanent) from network flakes (retriable).
