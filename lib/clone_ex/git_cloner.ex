@@ -8,7 +8,7 @@ defmodule CloneEx.GitCloner do
   """
 
   require Logger
-  alias CloneEx.{Retry, Utils}
+  alias CloneEx.{Retry, Utils, Config}
 
   @doc """
   Clones a git repository into a destination path using `--mirror`.
@@ -24,8 +24,8 @@ defmodule CloneEx.GitCloner do
   @spec clone_mirror(String.t(), Path.t(), keyword()) :: {:ok, Path.t()} | {:error, String.t()}
   def clone_mirror(url, dest_path, opts \\ []) do
     retry_opts = [
-      max_attempts: Keyword.get(opts, :max_retries, 3),
-      base_delay_ms: Keyword.get(opts, :retry_delay_ms, 1000)
+      max_attempts: Keyword.get(opts, :max_retries, Config.default_max_retries()),
+      base_delay_ms: Keyword.get(opts, :retry_delay_ms, Config.default_retry_delay_ms())
     ]
 
     Retry.with_retry(
@@ -39,7 +39,7 @@ defmodule CloneEx.GitCloner do
   end
 
   defp do_clone(url, dest_path, opts) do
-    timeout = Keyword.get(opts, :timeout, 600_000)
+    timeout = Keyword.get(opts, :timeout, Config.default_clone_timeout_ms())
     File.mkdir_p!(Path.dirname(dest_path))
 
     repo_name = Path.basename(dest_path)

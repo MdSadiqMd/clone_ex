@@ -22,9 +22,7 @@ defmodule CloneEx.Buffer do
       5
   """
 
-  @kb 1024
-  @mb 1024 * 1024
-  @gb 1024 * 1024 * 1024
+  alias CloneEx.Config
 
   @doc """
   Parses a human-readable size string into bytes.
@@ -48,13 +46,13 @@ defmodule CloneEx.Buffer do
           else: {:error, "Cannot parse size: negative value"}
 
       String.match?(size_str, ~r/^([0-9]+\.?[0-9]*)\s*GB$/i) ->
-        parse_with_multiplier(size_str, ~r/^([0-9]+\.?[0-9]*)\s*GB$/i, @gb)
+        parse_with_multiplier(size_str, ~r/^([0-9]+\.?[0-9]*)\s*GB$/i, Config.gb())
 
       String.match?(size_str, ~r/^([0-9]+\.?[0-9]*)\s*MB$/i) ->
-        parse_with_multiplier(size_str, ~r/^([0-9]+\.?[0-9]*)\s*MB$/i, @mb)
+        parse_with_multiplier(size_str, ~r/^([0-9]+\.?[0-9]*)\s*MB$/i, Config.mb())
 
       String.match?(size_str, ~r/^([0-9]+\.?[0-9]*)\s*KB$/i) ->
-        parse_with_multiplier(size_str, ~r/^([0-9]+\.?[0-9]*)\s*KB$/i, @kb)
+        parse_with_multiplier(size_str, ~r/^([0-9]+\.?[0-9]*)\s*KB$/i, Config.kb())
 
       true ->
         {:error, "Cannot parse size: #{size_str}. Expected format: 1GB, 512MB, 100KB, etc."}
@@ -100,10 +98,17 @@ defmodule CloneEx.Buffer do
   @spec format_size(non_neg_integer()) :: String.t()
   def format_size(bytes) when is_integer(bytes) and bytes >= 0 do
     cond do
-      bytes >= @gb -> "#{:erlang.float_to_binary(bytes / @gb, decimals: 2)} GB"
-      bytes >= @mb -> "#{:erlang.float_to_binary(bytes / @mb, decimals: 2)} MB"
-      bytes >= @kb -> "#{:erlang.float_to_binary(bytes / @kb, decimals: 2)} KB"
-      true -> "#{bytes} B"
+      bytes >= Config.gb() ->
+        "#{:erlang.float_to_binary(bytes / Config.gb(), decimals: 2)} GB"
+
+      bytes >= Config.mb() ->
+        "#{:erlang.float_to_binary(bytes / Config.mb(), decimals: 2)} MB"
+
+      bytes >= Config.kb() ->
+        "#{:erlang.float_to_binary(bytes / Config.kb(), decimals: 2)} KB"
+
+      true ->
+        "#{bytes} B"
     end
   end
 
